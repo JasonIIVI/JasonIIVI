@@ -290,7 +290,7 @@ export interface TzKit { ny: TzClock; zone(tz: string): TzClock }   // cached in
 
 ```ts
 // time/sessions.ts
-export interface SessionWindow { id: string; label: string; tz: string; start: HHMM; end: HHMM; kind: 'range' | 'killzone' | 'session'; days?: number[] }
+export interface SessionWindow { id: string; label: string; tz: string; start: HHMM; end: HHMM; kind: 'range' | 'killzone' | 'session' | 'macro'; days?: number[]; defaultOn?: boolean }
 export const DEFAULT_SESSIONS: SessionWindow[] = [   // America/New_York
   { id: 'asia',      label: 'Asia range',  tz: 'America/New_York', start: '20:00', end: '00:00', kind: 'range' },
   { id: 'cbdr',      label: 'CBDR',        tz: 'America/New_York', start: '14:00', end: '20:00', kind: 'range' },
@@ -298,6 +298,10 @@ export const DEFAULT_SESSIONS: SessionWindow[] = [   // America/New_York
   { id: 'london-kz', label: 'London KZ',   tz: 'America/New_York', start: '02:00', end: '05:00', kind: 'killzone' },
   { id: 'ny-am-kz',  label: 'NY AM KZ',    tz: 'America/New_York', start: '07:00', end: '10:00', kind: 'killzone' },
   { id: 'ny-pm-kz',  label: 'NY PM KZ',    tz: 'America/New_York', start: '13:30', end: '16:00', kind: 'killzone' },
+  // ICT Silver Bullet hours (strategy windows; hidden unless a preset/strategy or the user enables them)
+  { id: 'sb-london', label: 'SB London',   tz: 'America/New_York', start: '03:00', end: '04:00', kind: 'macro', defaultOn: false },
+  { id: 'sb-am',     label: 'SB AM',       tz: 'America/New_York', start: '10:00', end: '11:00', kind: 'macro', defaultOn: false },
+  { id: 'sb-pm',     label: 'SB PM',       tz: 'America/New_York', start: '14:00', end: '15:00', kind: 'macro', defaultOn: false },
 ];
 export interface SessionClock {
   windowAt(id: string, t: number): { start: number; end: number } | null;      // window containing t (checks today & yesterday for midnight-crossing)
@@ -478,7 +482,7 @@ export function computeIndicator(def: IndicatorDefinition, candles: Candle[], pa
 | vp | `poc`, `vah`, `val`, `hvn`, `lvn`, `vp:developing`, `vp:prev`, `vp:naked` |
 | fvg | `fvg:bull`, `fvg:bear`, `fvg:ce`, `ifvg:bull`, `ifvg:bear` |
 | session | `killzone:<id>`, `session:<id>`, `midnight-open`, `open:0830`, `open:0930`, `nwog`, `ndog` |
-| liquidity | `pdh`, `pdl`, `pwh`, `pwl`, `session:<id>:high`, `session:<id>:low`, `eqh`, `eql`, `liq:bsl`, `liq:ssl`, `swept` |
+| liquidity | `pdh`, `pdl`, `pwh`, `pwl`, `session:<id>:high`, `session:<id>:low`, `eqh`, `eql`, `liq:bsl`, `liq:ssl`, `swept`; sweep markers use `sweep:<levelTag>` (for example `sweep:pdh`, `sweep:eqh`, `sweep:session:asia:high`), as defined in §5.9 |
 | pivot | `pivot:classic:P`, `pivot:classic:R1` …, `pivot:fib:S2`, `pivot:cam:R3` |
 | sr | `sr:zone`, `sr:support`, `sr:resistance`, `sr:flip` |
 | structure | `bos:bull`, `mss:bear`, `structure:sh`, `structure:sl`, `structure:strong-low` |
@@ -706,9 +710,15 @@ while acc < target:
 ### 5.9 Sessions, killzones, opens, previous levels, NWOG/NDOG (`ict.sessions`)
 
 **Session boxes:**
-- Each window gets a box (family `session`) whose high and low develop while the window is active, plus a background span.
+- Each enabled window gets a box (family `session`) whose high and low develop while the window is active, plus a background span.
+- Windows with `defaultOn: false` (the Silver Bullet hours) appear only when the user or a preset/strategy enables them.
 - After the window ends, `session:<id>:high` and `session:<id>:low` become liquidity levels (`liq:bsl`, `liq:ssl`) until they are swept.
-- A sweep ends the level as `swept` and adds a marker.
+
+**Sweep definition** (shared by every liquidity level: session highs and lows, PDH/PDL/PWH/PWL and EQH/EQL):
+- A high level is swept by the first bar with `H ≥ level + sweepTicks·tick` [sweepTicks = 1]; a low level mirrors this.
+- The level ends as `swept` at that bar's close. The runtime emits a marker tagged `sweep:<levelTag>` (for example `sweep:pdh` or `sweep:session:asia:high`) with `meta.reclaimed`.
+- `meta.reclaimed` is true when the same bar closes back on the original side of the level.
+- Strategies decide whether a reclaim is required. The indicator only records the facts.
 
 **Opens:**
 - `midnight-open` (00:00 NY), optionally `open:0830` and `open:0930`. Each stays active until the end of the day.
@@ -912,7 +922,9 @@ export interface FillModel { limit: 'touch' | 'through'; throughTicks: number } 
 - **Trade counts and ratios:** trades, wins, losses, breakevens (|R| < 0.05), win rate, and average, median, average-win and average-loss R, plus payoff.
 - **Expectancy and quality:** expectancy in R and in $, profit factor (null when there are no losses) and SQN.
 - **Drawdown and streaks:** max drawdown in $, % and R, on both closed-trade and mark-to-market equity; longest win and loss streaks; average bars held; exposure.
-- **Breakdowns:** `GroupStats {trades, winRate, avgR, totalR, pf}` by session (the first match among asia, london-kz, ny-am-kz and ny-pm-kz, else "other"), NY weekday, NY hour, side and setup tag.
+- **Breakdowns:** `GroupStats {trades, winRate, avgR, totalR, pf}` by session, NY weekday, NY hour, side and setup tag.
+  - The session bucket is the **strategy's own declared windows** when it has any. For example, a Silver Bullet strategy buckets by `sb-london`, `sb-am` and `sb-pm`.
+  - Otherwise it is the first match among asia, london-kz, ny-am-kz and ny-pm-kz, else "other".
 
 **Walk-forward:** 2019–2023 in-sample and 2024–2026 out-of-sample for NQ, plus rolling windows. Report every variant tried, not only the best one.
 
