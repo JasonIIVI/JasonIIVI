@@ -39,6 +39,8 @@ New strategy ideas don't go here. They go through the `strategy-intake` skill in
 - **Footprint / order flow:** needs tick-level trade data (Databento trades), so cost and complexity are high. Revisit after Phase 2 if volume profile proves useful.
 - **Options gamma exposure (GEX) for NQ/ES:** needs options data, which is expensive.
 - **Multi-device sync:** Supabase, only if a laptop plus phone over Tailscale isn't enough.
+- **Swing-point liquidity levels:** confirmed swing highs and lows (for example 5m fractals) emitted as `liq:bsl` / `liq:ssl` levels until swept, with sweep markers. The [Silver Bullet rulebook](strategy/silver-bullet.md) needs them for its L2 pool variant and for "next liquidity" targets; `ict.eqhl` covers only *equal* highs and lows. Small once `ict.swings` exists.
+- **Historical economic-calendar backfill (2019 onward):** FOMC dates plus the major US 08:30 and 10:00 NY releases, so the news lockout can be tested in backtests. The Forex Factory feed covers only the current week, and our calendar table accumulates only from Phase 1 on. [Likely] Sources: the Fed's FOMC calendar and FRED release dates.
 
 ## Rejected (and why)
 

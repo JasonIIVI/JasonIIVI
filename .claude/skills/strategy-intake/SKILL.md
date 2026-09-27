@@ -15,7 +15,7 @@ This skill turns the input into the project's rulebook format. Every rule carrie
 |---|---|
 | `trading-desk/docs/strategy/_template.md` | The exact structure to fill (sections 1–14 plus a changelog). Copy it and don't invent sections. |
 | `trading-desk/docs/strategy/sd-vp-ote.md` | A finished example of the depth, tone and tagging expected |
-| `trading-desk/docs/architecture.md` | §5 has the indicator ids and exact algorithms, §4.4 the tag vocabulary, §6 the preset format |
+| `trading-desk/docs/architecture.md` | It's long, so read selectively. §4.4 has the tag vocabulary; §3 the session windows; §6 the preset format, and that presets express overlap, not sequences; §7 the strategy interface. From §5, read only the subsections for the indicators you map to. |
 | `trading-desk/docs/roadmap.md` | Tells you which phase a missing indicator or feature belongs to |
 | `trading-desk/docs/strategy/extraction-prompt.md` | Hand this to the owner when all they have is video links. You can't watch videos, so don't pretend to. |
 

@@ -447,7 +447,11 @@ export class AnalysisEngine {
   results(): Record<string, InstanceResult>;         // chart: primitives/lines/markers/warnings
   onBaseClose?: (t: number) => void;                 // backtester/strategy hook
 }
-export interface IndicatorSnapshot { ref: string; t: number; primitives: Primitive[]; lines: Record<string, number> }
+export interface IndicatorSnapshot {
+  ref: string; t: number; primitives: Primitive[]; lines: Record<string, number>;
+  ended: Primitive[];    // primitives that ended in (prevT, t], with endReason/endedAt, e.g. a pool that ended 'swept'
+  markers: Marker[];     // markers with knownAt in (prevT, t], e.g. sweep:pdh, bos:bull
+}
 // batch helper — derived from the engine, not a second implementation:
 export function computeIndicator(def: IndicatorDefinition, candles: Candle[], params: unknown, opts: { instrument: Instrument; tf: Timeframe; history?: 'final' | 'full' }): InstanceResult;
 ```
@@ -457,6 +461,8 @@ export function computeIndicator(def: IndicatorDefinition, candles: Candle[], pa
   - Then, if the base feed closed at T, evaluate the confluence presets and call `onBaseClose(T)`.
   - A higher-timeframe bar is therefore usable **exactly at its close**. For example, the 09:00 1h bar and the 09:55 5m bar both become usable at 10:00.
 - **As-of semantics:** a snapshot at t contains every primitive with `knownAt ≤ t` that hasn't ended by t, in its state as of t.
+  - It also carries the **events** since the previous step: `ended` primitives (with `endReason`) and new `markers`.
+  - Sequence strategies such as sweep → FVG → entry need events, because a swept pool is no longer active and would otherwise just vanish from the snapshot.
   - Lockstep gives this directly.
   - With history mode `'full'`, `timelineSnapshot(result, t)` rebuilds the same thing from a batch run; the causality test uses this.
 - **Cost:** streaming blocks cost O(1) per bar, or O(rows touched) for volume profile. 100k bars × 8 instances runs well under a second in V8.
@@ -833,6 +839,8 @@ export interface ConfluenceZone {
    - `knownAt` is the latest `knownAt` among the constituents.
 7. **History:** the engine records when each zone id first and last appeared. The chart can draw historical boxes, and the backtester can react to "new zone" events.
 
+**Presets express overlap at a single moment.** Sequences, such as "a pool is swept, then the first FVG after it, then a limit order", are strategy logic (§7) and read events through `StrategyContext.events`.
+
 **Flagship preset** (data, not code; `confluence/presets/sd-vp-ote.ts`). The strategy rules live in [strategy/sd-vp-ote.md](strategy/sd-vp-ote.md).
 
 ```ts
@@ -877,6 +885,7 @@ export interface StrategyDefinition<S extends z.ZodObject = z.ZodObject> {
 export interface StrategyContext {
   readonly bars: BarsView; readonly instrument: Instrument; readonly tz: TzKit; readonly sessions: SessionClock;
   snapshot(ref: string): IndicatorSnapshot;       // as-of now (engine lockstep)
+  events(ref: string, since: number): { ended: Primitive[]; markers: Marker[] };  // as-of now; lookback capped at 500 base bars
   confluence(presetId: string): ConfluenceZone[];
   broker: {
     position(): Position | null; openOrders(): Order[];
